@@ -6,7 +6,9 @@ This file records what the public tree contains, what was removed, and what stil
 
 ## Current status
 
-The GitHub repository **and** the `ghcr.io/user4xn/cronsoul` container package are both private at the time of this audit. Publishing takes two separate actions: changing repository visibility, and setting the GHCR package visibility to Public. Neither one implies the other.
+`user4xn/cronsoul-public` is the public repository. It publishes `ghcr.io/user4xn/cronsoul-public`, which is owned by this repository, so the publish workflow can push with the repository-provided `GITHUB_TOKEN`.
+
+The original private repository `user4xn/cronsoul` holds the pre-publication history and is not required to build or run CronSoul. Anonymous pulls still depend on the package's own visibility setting, which is separate from repository visibility.
 
 ## Public product surface (current tree)
 

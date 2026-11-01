@@ -2,7 +2,7 @@
 
 CronSoul is distributed as a self-hosted container image. The image registry is GHCR; the repository and package can have separate visibility settings. The container stores its SQLite database and encryption key under `/data`; keep that volume persistent and back it up.
 
-- GHCR image: `ghcr.io/user4xn/cronsoul`
+- GHCR image: `ghcr.io/user4xn/cronsoul-public`
 - Source: <https://github.com/user4xn/cronsoul>
 - Image tags: `master` tracks the current `master` build; a reviewed `vX.Y.Z` version tag publishes both that tag and `latest`.
 - Architectures: Linux amd64 and arm64 are built by the publish workflow.
@@ -14,15 +14,15 @@ For anonymous pulls, the GHCR package must be set to **Public** in the package s
 For the current branch image:
 
 ```bash
-docker pull ghcr.io/user4xn/cronsoul:master
+docker pull ghcr.io/user4xn/cronsoul-public:master
 ```
 
 For an approved stable release, prefer an immutable version tag:
 
 ```bash
-docker pull ghcr.io/user4xn/cronsoul:vX.Y.Z
+docker pull ghcr.io/user4xn/cronsoul-public:vX.Y.Z
 # `latest` is also published on version-tag releases
-docker pull ghcr.io/user4xn/cronsoul:latest
+docker pull ghcr.io/user4xn/cronsoul-public:latest
 ```
 
 The `latest` tag is not guaranteed to exist until the first approved `vX.Y.Z` tag is pushed. Start with the branch image for a local evaluation — no environment variables are needed:
@@ -32,7 +32,7 @@ docker volume create cronsoul-data
 docker run -d --name cronsoul --restart unless-stopped \
   -p 127.0.0.1:9470:9470 \
   -v cronsoul-data:/data \
-  ghcr.io/user4xn/cronsoul:master
+  ghcr.io/user4xn/cronsoul-public:master
 ```
 
 The image ships with `CRONSOUL_ENV=dev`, `CRONSOUL_TLS_MODE=off`, `CRONSOUL_DB=/data/cronsoul.db` and `CRONSOUL_SECRET_KEY_FILE=/data/secret.key`. The key is generated once on the volume, so channel credentials stay readable across restarts. Supply the environment explicitly only when you move to production (see below).

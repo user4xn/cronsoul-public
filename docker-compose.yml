@@ -2,7 +2,7 @@
 # configure production environment/TLS as documented in docs/CONTAINER.md.
 services:
   cronsoul:
-    image: ghcr.io/user4xn/cronsoul:master
+    image: ghcr.io/user4xn/cronsoul-public:master
     restart: unless-stopped
     ports:
       # Loopback only. Put a TLS-terminating reverse proxy in front of this and
