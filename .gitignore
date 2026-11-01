@@ -1,0 +1,27 @@
+node_modules/
+.DS_Store
+
+# build output
+/cronsoul
+/dist/
+
+# local runtime data
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+
+# local env and deployment secrets
+.env
+.env.*
+!.env.example
+.secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+*.der
+*.jks
+*.secret

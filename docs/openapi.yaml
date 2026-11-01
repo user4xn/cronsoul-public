@@ -1,0 +1,1709 @@
+openapi: 3.0.3
+info:
+  title: CronSoul API
+  version: 1.0.0
+  description: 'HTTP API used by the CronSoul embedded console.
+
+
+    **Status: internal, unversioned contract.** These are the routes the shipped UI calls. They can change between
+    releases; treat this as an operator/integration aid, not a stable public API.
+
+
+    **Authentication.** `POST /api/v1/auth/login` sets an HTTP-only `cs_session` cookie. Roles are ordered `viewer`
+    < `qa` < `admin` < `superadmin`; each operation lists its minimum role.
+
+
+    **Errors** return `{"error": "message"}`. `401` = no/expired session, `403` = role too low, `409` = state conflict
+    (singleton run active, duplicate username, last superadmin), `428` = password change required.'
+servers:
+- url: http://127.0.0.1:9470
+  description: Default listen address (CRONSOUL_LISTEN)
+security:
+- cookieAuth: []
+tags:
+- name: auth
+- name: jobs
+- name: runs
+- name: alerts
+- name: channels
+- name: settings
+- name: governance
+- name: diagnostics
+paths:
+  /healthz:
+    get:
+      tags:
+      - diagnostics
+      summary: Liveness and build metadata
+      security: []
+      responses:
+        '200':
+          description: Instance health
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  db:
+                    type: string
+                    example: ok
+                  env:
+                    type: string
+                    example: dev
+                  version:
+                    type: string
+                    example: 0.1.0
+                  workers:
+                    type: integer
+                    example: 1
+  /build.json:
+    get:
+      tags:
+      - diagnostics
+      summary: Served build version
+      security: []
+      responses:
+        '200':
+          description: Build version
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                    example: dev
+  /time.json:
+    get:
+      tags:
+      - diagnostics
+      summary: Server clock in the configured display timezone
+      security: []
+      responses:
+        '200':
+          description: Clock snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  now:
+                    type: string
+                    format: date-time
+                  zone:
+                    type: string
+                    example: Asia/Jakarta
+                  offset:
+                    type: string
+                    example: +07:00
+  /api/v1/auth/login:
+    post:
+      tags:
+      - auth
+      summary: Start a session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - username
+              - password
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                  format: password
+      security: []
+      responses:
+        '200':
+          description: Session cookie set; body is the current user
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: HTTP-only cs_session cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Invalid credentials
+          content: &id001
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: Login rate limit reached
+          content: *id001
+  /api/v1/auth/me:
+    get:
+      tags:
+      - auth
+      summary: Current session user
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          description: Error
+          content: *id001
+  /api/v1/auth/logout:
+    post:
+      tags:
+      - auth
+      summary: End the session and clear the cookie
+      responses:
+        '204':
+          description: Session ended
+        '401':
+          description: Error
+          content: *id001
+  /api/v1/auth/change-password:
+    post:
+      tags:
+      - auth
+      summary: Change the caller's password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - current_password
+              - new_password
+              properties:
+                current_password:
+                  type: string
+                  format: password
+                new_password:
+                  type: string
+                  format: password
+                  minLength: 10
+      responses:
+        '200':
+          description: Password changed
+        '400':
+          description: Error
+          content: *id001
+        '401':
+          description: Error
+          content: *id001
+  /api/v1/jobs/:
+    get:
+      tags:
+      - jobs
+      summary: List endpoints
+      description: 'Minimum role: `viewer`.'
+      parameters:
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 200
+      - in: query
+        name: cursor
+        schema:
+          type: string
+      - in: query
+        name: q
+        schema:
+          type: string
+          description: Free-text filter over name, key and URL
+      - in: query
+        name: service
+        schema:
+          type: string
+      - in: query
+        name: include_disabled
+        schema:
+          type: string
+          enum:
+          - 'true'
+      responses:
+        '200':
+          description: Page of endpoints
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Job'
+                  next_cursor:
+                    type: string
+                    nullable: true
+        '401':
+          description: Error
+          content: *id001
+    post:
+      tags:
+      - jobs
+      summary: Create an endpoint
+      description: 'Minimum role: `admin`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobInput'
+      responses:
+        '201':
+          description: Created endpoint
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '400':
+          description: Error
+          content: *id001
+        '403':
+          description: Error
+          content: *id001
+  /api/v1/jobs/upcoming:
+    get:
+      tags:
+      - jobs
+      summary: Next scheduled runs
+      description: 'Minimum role: `viewer`.'
+      parameters:
+      - in: query
+        name: minutes
+        schema:
+          type: integer
+          default: 60
+      responses:
+        '200':
+          description: Upcoming runs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    next_run_at:
+                      type: string
+                      format: date-time
+  /api/v1/jobs/schedule-preview:
+    post:
+      tags:
+      - jobs
+      summary: Preview the next fire times for a cron expression
+      description: 'Minimum role: `qa`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - cron
+              - timezone
+              properties:
+                cron:
+                  type: string
+                  example: '*/5 * * * *'
+                timezone:
+                  type: string
+                  example: Asia/Jakarta
+                count:
+                  type: integer
+                  default: 5
+      responses:
+        '200':
+          description: Previewed fire times
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  runs:
+                    type: array
+                    items:
+                      type: string
+                      format: date-time
+        '400':
+          description: Error
+          content: *id001
+  /api/v1/jobs/{id}:
+    parameters:
+    - in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    get:
+      tags:
+      - jobs
+      summary: Fetch one endpoint
+      description: 'Minimum role: `viewer`.'
+      responses:
+        '200':
+          description: Endpoint
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '404':
+          description: Error
+          content: *id001
+    patch:
+      tags:
+      - jobs
+      summary: Update an endpoint
+      description: 'Minimum role: `admin`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobInput'
+      responses:
+        '200':
+          description: Updated endpoint
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        '400':
+          description: Error
+          content: *id001
+    put:
+      tags:
+      - jobs
+      summary: Replace an endpoint
+      description: 'Minimum role: `admin`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobInput'
+      responses:
+        '200':
+          description: Updated endpoint
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+    delete:
+      tags:
+      - jobs
+      summary: Delete an endpoint
+      description: 'Minimum role: `admin`.'
+      responses:
+        '204':
+          description: Deleted
+        '404':
+          description: Error
+          content: *id001
+  /api/v1/jobs/{id}/run:
+    parameters:
+    - in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    post:
+      tags:
+      - jobs
+      summary: Queue a manual run
+      description: 'Returns `202` when the run is queued. `409` means a singleton job already has an active run.
+        The optional body controls assertions, the dry-run marker and simulated time.
+
+
+        Minimum role: `qa`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                use_assertions:
+                  type: boolean
+                dry_run:
+                  type: boolean
+                simulated_time:
+                  type: string
+                  format: date-time
+      responses:
+        '202':
+          description: Run accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_id:
+                    type: string
+        '409':
+          description: Singleton job already running
+          content: *id001
+  /api/v1/jobs/{id}/preview:
+    parameters:
+    - in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    post:
+      tags:
+      - jobs
+      summary: Dry-run the request without creating a run
+      description: 'Minimum role: `qa`.'
+      responses:
+        '200':
+          description: Guarded request outcome
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                  error:
+                    type: string
+                    nullable: true
+  /api/v1/runs:
+    get:
+      tags:
+      - runs
+      summary: List runs
+      description: 'Minimum role: `viewer`.'
+      parameters:
+      - in: query
+        name: job_id
+        schema:
+          type: string
+      - in: query
+        name: status
+        schema:
+          type: string
+      - in: query
+        name: trigger
+        schema:
+          type: string
+          enum:
+          - schedule
+          - manual
+          - retry
+          - replay
+      - in: query
+        name: from
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: to
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          default: 50
+      - in: query
+        name: cursor
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Page of runs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Run'
+                  next_cursor:
+                    type: string
+                    nullable: true
+  /api/v1/runs/{id}:
+    get:
+      tags:
+      - runs
+      summary: Run detail with attempts and excerpts
+      description: 'Minimum role: `viewer`.'
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Run detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunDetail'
+        '404':
+          description: Error
+          content: *id001
+  /api/v1/stats:
+    get:
+      tags:
+      - runs
+      summary: Dashboard counters
+      description: 'Minimum role: `viewer`.'
+      responses:
+        '200':
+          description: Counters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  active_jobs:
+                    type: integer
+                  runs_24h:
+                    type: integer
+                  runs_24h_prev:
+                    type: integer
+                  success_24h:
+                    type: integer
+                  failed_24h:
+                    type: integer
+                  retried_24h:
+                    type: integer
+                  success_rate:
+                    type: number
+                  success_rate_prev:
+                    type: number
+                  open_alerts:
+                    type: integer
+                  needs_attention:
+                    type: integer
+  /api/v1/timeline:
+    get:
+      tags:
+      - runs
+      summary: Hourly activity grid
+      description: 'Minimum role: `viewer`.'
+      parameters:
+      - in: query
+        name: range
+        schema:
+          type: string
+          enum:
+          - today
+          - 24h
+          - 7d
+          - 30d
+      - in: query
+        name: tz
+        schema:
+          type: string
+          description: IANA zone for the grid; defaults to the configured display timezone
+      responses:
+        '200':
+          description: Timeline
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Timeline'
+  /api/v1/alerts:
+    get:
+      tags:
+      - alerts
+      summary: Alert records
+      description: 'Minimum role: `viewer`.'
+      responses:
+        '200':
+          description: Alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Alert'
+  /api/v1/outbox:
+    get:
+      tags:
+      - alerts
+      summary: Notification outbox and delivery state
+      description: 'Minimum role: `viewer`.'
+      responses:
+        '200':
+          description: Outbox rows
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        kind:
+                          type: string
+                        channel:
+                          type: string
+                        target:
+                          type: string
+                          nullable: true
+                        status:
+                          type: string
+                          enum:
+                          - pending
+                          - sent
+                          - failed
+                        attempts:
+                          type: integer
+                        next_attempt_at:
+                          type: string
+                          format: date-time
+                        sent_at:
+                          type: string
+                          format: date-time
+                          nullable: true
+                        last_error:
+                          type: string
+                          nullable: true
+  /api/v1/channels:
+    get:
+      tags:
+      - channels
+      summary: List notification channels
+      description: 'Minimum role: `superadmin`.'
+      responses:
+        '200':
+          description: Channels
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Channel'
+    post:
+      tags:
+      - channels
+      summary: Create a notification channel
+      description: 'Minimum role: `superadmin`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelInput'
+      responses:
+        '201':
+          description: Created channel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Channel'
+        '400':
+          description: Error
+          content: *id001
+  /api/v1/channels/{id}:
+    parameters:
+    - in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    put:
+      tags:
+      - channels
+      summary: Update a channel
+      description: 'Minimum role: `superadmin`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelInput'
+      responses:
+        '200':
+          description: Updated channel
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Channel'
+    delete:
+      tags:
+      - channels
+      summary: Delete a channel
+      description: 'Minimum role: `superadmin`.'
+      responses:
+        '204':
+          description: Deleted
+  /api/v1/channels/{id}/test:
+    parameters:
+    - in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    post:
+      tags:
+      - channels
+      summary: Send a test notification
+      description: 'Minimum role: `superadmin`.'
+      responses:
+        '200':
+          description: Delivery attempt result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sent:
+                    type: boolean
+                  delivered:
+                    type: integer
+                  total:
+                    type: integer
+                  reason:
+                    type: string
+  /api/v1/settings:
+    get:
+      tags:
+      - settings
+      summary: Read instance settings
+      description: 'Minimum role: `viewer`.'
+      responses:
+        '200':
+          description: Settings map plus instance environment
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    additionalProperties: true
+                    example:
+                      scheduler.enabled: true
+                      display.timezone: Asia/Jakarta
+                      session_ttl_hours: '12'
+                      max_response_bytes: '32768'
+                      allow_private_egress: false
+                      allow_insecure_targets: false
+                      follow_redirects: false
+                  env:
+                    type: string
+                    example: dev
+  /api/v1/settings/scheduler:
+    patch:
+      tags:
+      - settings
+      summary: Enable or disable the background scheduler
+      description: 'Minimum role: `superadmin`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - enabled
+              properties:
+                enabled:
+                  type: boolean
+      responses:
+        '200':
+          description: New state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+  /api/v1/settings/display:
+    patch:
+      tags:
+      - settings
+      summary: Change the console display timezone
+      description: 'Minimum role: `superadmin`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - timezone
+              properties:
+                timezone:
+                  type: string
+                  example: Asia/Jakarta
+      responses:
+        '200':
+          description: Timezone saved
+        '400':
+          description: Error
+          content: *id001
+  /api/v1/security:
+    get:
+      tags:
+      - settings
+      summary: Insecure-HTTP test mode state
+      description: 'Minimum role: `superadmin`.'
+      responses:
+        '200':
+          description: Current state; expired windows are reported inactive
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Security'
+  /api/v1/security/insecure-http:
+    put:
+      tags:
+      - settings
+      summary: Open a time-boxed insecure-HTTP window
+      description: 'Refused in production.
+
+
+        Minimum role: `superadmin`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - duration
+              properties:
+                duration:
+                  type: string
+                  enum:
+                  - 1h
+                  - 24h
+                  - 7d
+      responses:
+        '200':
+          description: Window opened
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Security'
+        '403':
+          description: Insecure mode is prohibited in production
+          content: *id001
+  /api/v1/users:
+    get:
+      tags:
+      - governance
+      summary: List console users
+      description: 'Minimum role: `admin`.'
+      responses:
+        '200':
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+    post:
+      tags:
+      - governance
+      summary: Create a user
+      description: 'Minimum role: `admin`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - username
+              - password
+              - role
+              properties:
+                username:
+                  type: string
+                  pattern: ^[A-Za-z0-9._-]{2,64}$
+                password:
+                  type: string
+                  format: password
+                  minLength: 10
+                role:
+                  type: string
+                  enum:
+                  - viewer
+                  - qa
+                  - admin
+                email:
+                  type: string
+                  format: email
+      responses:
+        '201':
+          description: Created user; must change password at first login
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  username:
+                    type: string
+                  role:
+                    type: string
+                  must_change_password:
+                    type: boolean
+        '409':
+          description: Username unavailable
+          content: *id001
+  /api/v1/users/{id}/{action}:
+    post:
+      tags:
+      - governance
+      summary: Reset, disable, enable, or delete a user
+      description: 'Minimum role: `admin`.'
+      parameters:
+      - in: path
+        name: id
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: action
+        required: true
+        schema:
+          type: string
+        description: reset-password | disable | enable | delete
+      responses:
+        '200':
+          description: Action applied
+        '409':
+          description: Target is your own account or the last active superadmin
+          content: *id001
+  /api/v1/allowlist:
+    get:
+      tags:
+      - governance
+      summary: List egress allowlist entries
+      description: 'Minimum role: `superadmin`.'
+      responses:
+        '200':
+          description: Entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AllowlistEntry'
+    post:
+      tags:
+      - governance
+      summary: Add an allowlist entry
+      description: 'Minimum role: `superadmin`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - pattern
+              properties:
+                pattern:
+                  type: string
+                  description: Host, host:port, IP, wildcard, or full URL
+                  example: api.example.com
+                note:
+                  type: string
+      responses:
+        '200':
+          description: Entry created
+        '400':
+          description: Error
+          content: *id001
+  /api/v1/allowlist/{id}:
+    parameters:
+    - in: path
+      name: id
+      required: true
+      schema:
+        type: string
+    put:
+      tags:
+      - governance
+      summary: Update an allowlist entry
+      description: 'Minimum role: `superadmin`.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                pattern:
+                  type: string
+                note:
+                  type: string
+      responses:
+        '200':
+          description: Entry updated
+    delete:
+      tags:
+      - governance
+      summary: Delete an allowlist entry
+      description: 'Minimum role: `superadmin`.'
+      responses:
+        '204':
+          description: Deleted
+  /api/v1/audit:
+    get:
+      tags:
+      - governance
+      summary: Audit log
+      description: 'Minimum role: `admin`.'
+      parameters:
+      - in: query
+        name: actor
+        schema:
+          type: string
+      - in: query
+        name: action
+        schema:
+          type: string
+      - in: query
+        name: target_type
+        schema:
+          type: string
+      - in: query
+        name: q
+        schema:
+          type: string
+      - in: query
+        name: limit
+        schema:
+          type: integer
+          default: 50
+          minimum: 1
+          maximum: 200
+      - in: query
+        name: offset
+        schema:
+          type: integer
+          minimum: 0
+      responses:
+        '200':
+          description: Audit entries, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditEntry'
+                  total:
+                    type: integer
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: cs_session
+      description: HTTP-only session cookie set by POST /api/v1/auth/login.
+  parameters:
+    JobId:
+      in: path
+      name: id
+      required: true
+      schema:
+        type: string
+  responses:
+    Unauthorized:
+      description: No session or the session has expired
+      content: *id001
+    Forbidden:
+      description: The caller's role is too low
+      content: *id001
+    NotFound:
+      description: Resource not found
+      content: *id001
+    BadRequest:
+      description: Invalid request
+      content: *id001
+  schemas:
+    Error:
+      type: object
+      required:
+      - error
+      properties:
+        error:
+          type: string
+          example: unauthorized
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        email:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum:
+          - viewer
+          - qa
+          - admin
+          - superadmin
+        disabled:
+          type: boolean
+        must_change_password:
+          type: boolean
+        last_login_at:
+          type: string
+          format: date-time
+          nullable: true
+    Job:
+      type: object
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        name:
+          type: string
+        service:
+          type: string
+        method:
+          type: string
+          example: POST
+        url:
+          type: string
+        cron:
+          type: string
+          example: '*/5 * * * *'
+        timezone:
+          type: string
+          example: Asia/Jakarta
+        timeout_s:
+          type: integer
+        risk_tier:
+          type: string
+        enabled:
+          type: boolean
+        headers:
+          type: object
+          nullable: true
+        query:
+          type: object
+          nullable: true
+        body:
+          nullable: true
+        assertions:
+          type: object
+          nullable: true
+          properties:
+            enabled:
+              type: boolean
+            rules:
+              type: array
+              items:
+                type: object
+                properties:
+                  type:
+                    type: string
+                  path:
+                    type: string
+                  equals:
+                    nullable: true
+                  contains:
+                    type: string
+                  exists:
+                    type: boolean
+        auth_type:
+          type: string
+        retry:
+          type: object
+          properties:
+            max:
+              type: integer
+            backoff:
+              type: string
+            'on':
+              type: array
+              items:
+                type: string
+        notify:
+          type: object
+          properties:
+            'on':
+              type: array
+              items:
+                type: string
+        singleton:
+          type: boolean
+        idempotent:
+          type: boolean
+        dry_run_param:
+          type: string
+        clock_aware:
+          type: boolean
+        simulated_time_header:
+          type: string
+        allow_simulated_time_prod:
+          type: boolean
+        tags:
+          type: array
+          items:
+            type: string
+        next_run_at:
+          type: string
+          format: date-time
+        last_run_status:
+          type: string
+        last_run_at:
+          type: string
+          format: date-time
+        assertion_count:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    JobInput:
+      type: object
+      required:
+      - key
+      - name
+      - method
+      - url
+      - cron
+      - timezone
+      properties:
+        key:
+          type: string
+          description: Unique slug used in paths and logs
+        name:
+          type: string
+        service:
+          type: string
+        method:
+          type: string
+          enum:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - HEAD
+        url:
+          type: string
+          description: Must pass the egress allowlist
+        cron:
+          type: string
+        timezone:
+          type: string
+          example: Asia/Jakarta
+        timeout_s:
+          type: integer
+          default: 30
+        risk_tier:
+          type: string
+          enum:
+          - low
+          - medium
+          - high
+        enabled:
+          type: boolean
+          default: true
+        headers:
+          type: object
+        query:
+          type: object
+        body:
+          nullable: true
+        auth_type:
+          type: string
+        retry:
+          type: object
+          properties:
+            max:
+              type: integer
+            backoff:
+              type: string
+        notify:
+          type: object
+          properties:
+            'on':
+              type: array
+              items:
+                type: string
+        singleton:
+          type: boolean
+        idempotent:
+          type: boolean
+        dry_run_param:
+          type: string
+        clock_aware:
+          type: boolean
+        simulated_time_header:
+          type: string
+        allow_simulated_time_prod:
+          type: boolean
+        assertions:
+          type: object
+        tags:
+          type: array
+          items:
+            type: string
+    Run:
+      type: object
+      properties:
+        id:
+          type: string
+        job_id:
+          type: string
+        trigger:
+          type: string
+          enum:
+          - schedule
+          - manual
+          - retry
+          - replay
+        triggered_by:
+          type: string
+          nullable: true
+        scheduled_for:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+        http_status:
+          type: integer
+          nullable: true
+        duration_ms:
+          type: integer
+          nullable: true
+        attempts:
+          type: integer
+        simulated:
+          type: boolean
+        simulated_time:
+          type: string
+          format: date-time
+          nullable: true
+        dry_run:
+          type: boolean
+        response_truncated:
+          type: boolean
+        assertion_passed:
+          type: boolean
+          nullable: true
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        finished_at:
+          type: string
+          format: date-time
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        job_name:
+          type: string
+        job_key:
+          type: string
+        job_method:
+          type: string
+        job_url:
+          type: string
+    RunDetail:
+      allOf:
+      - $ref: '#/components/schemas/Run'
+      - type: object
+        properties:
+          request_excerpt:
+            type: string
+            nullable: true
+          response_excerpt:
+            type: string
+            nullable: true
+          attempts_detail:
+            type: array
+            items:
+              type: object
+              properties:
+                attempt_no:
+                  type: integer
+                status:
+                  type: string
+                http_status:
+                  type: integer
+                  nullable: true
+                duration_ms:
+                  type: integer
+                  nullable: true
+                error:
+                  type: string
+                  nullable: true
+                started_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+                finished_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+                response_excerpt:
+                  type: string
+                  nullable: true
+                next_attempt_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+          assertion_results:
+            type: array
+            items:
+              type: object
+              properties:
+                kind:
+                  type: string
+                target:
+                  type: string
+                expected:
+                  type: string
+                actual:
+                  type: string
+                passed:
+                  type: boolean
+    Timeline:
+      type: object
+      properties:
+        range:
+          type: string
+        timezone:
+          type: string
+        hours:
+          type: array
+          items:
+            type: object
+            properties:
+              hour:
+                type: integer
+              jobs:
+                type: integer
+        rows:
+          type: array
+          items:
+            type: object
+            properties:
+              job_id:
+                type: string
+              name:
+                type: string
+              key:
+                type: string
+              enabled:
+                type: boolean
+              cron:
+                type: string
+              runs:
+                type: integer
+              ok:
+                type: integer
+              fail:
+                type: integer
+              missed:
+                type: integer
+              cells:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    runs:
+                      type: integer
+                    ok:
+                      type: integer
+                    fail:
+                      type: integer
+                    missed:
+                      type: integer
+    Alert:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+        job_id:
+          type: string
+          nullable: true
+        message:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+    Channel:
+      type: object
+      properties:
+        id:
+          type: string
+        kind:
+          type: string
+          enum:
+          - smtp
+          - telegram
+          - webhook
+        name:
+          type: string
+        enabled:
+          type: boolean
+        events:
+          type: array
+          items:
+            type: string
+        meta:
+          type: object
+          nullable: true
+          description: Non-secret summary only; credentials are encrypted at rest and never returned
+          properties:
+            host:
+              type: string
+            port:
+              type: integer
+            from:
+              type: string
+            tls:
+              type: boolean
+            targets:
+              type: array
+              items:
+                type: string
+    ChannelInput:
+      type: object
+      required:
+      - kind
+      - name
+      properties:
+        kind:
+          type: string
+          enum:
+          - smtp
+          - telegram
+          - webhook
+        name:
+          type: string
+        enabled:
+          type: boolean
+        events:
+          type: array
+          items:
+            type: string
+        config:
+          type: object
+          description: Transport credentials; encrypted before storage
+          properties:
+            host:
+              type: string
+            port:
+              type: integer
+            user:
+              type: string
+            pass:
+              type: string
+              format: password
+            from:
+              type: string
+            tls:
+              type: boolean
+            bot_token:
+              type: string
+              format: password
+            chat_ids:
+              type: array
+              items:
+                type: string
+    Security:
+      type: object
+      properties:
+        allow_insecure_targets:
+          type: boolean
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        warning:
+          type: boolean
+    AllowlistEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        pattern:
+          type: string
+          example: api.example.com
+        note:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+    AuditEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        actor_name:
+          type: string
+        action:
+          type: string
+          example: settings.scheduler.update
+        target_type:
+          type: string
+          nullable: true
+        target_id:
+          type: string
+          nullable: true
+        ip:
+          type: string
+        at:
+          type: string
+          format: date-time

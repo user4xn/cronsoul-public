@@ -1,0 +1,29 @@
+# Loopback-only Compose quick start. For production, pin a reviewed tag and
+# configure production environment/TLS as documented in docs/CONTAINER.md.
+services:
+  cronsoul:
+    image: ghcr.io/user4xn/cronsoul:master
+    restart: unless-stopped
+    ports:
+      # Loopback only. Put a TLS-terminating reverse proxy in front of this and
+      # switch CRONSOUL_TLS_MODE to proxy for any non-local use.
+      - "127.0.0.1:9470:9470"
+    environment:
+      CRONSOUL_ENV: dev
+      CRONSOUL_LISTEN: ":9470"
+      CRONSOUL_DB: /data/cronsoul.db
+      CRONSOUL_TLS_MODE: "off"
+      CRONSOUL_SESSION_TTL: 12h
+      CRONSOUL_DISPLAY_TZ: Asia/Jakarta
+      # The key encrypts channel credentials. Left empty, the app creates one on
+      # the /data volume at first boot and reuses it afterwards — so a plain
+      # `docker compose up` works, and restarts keep existing configs readable.
+      # Back that file up together with cronsoul.db. To supply your own instead:
+      #   CRONSOUL_SECRET_KEY=$(openssl rand -base64 32)   (env or .env file)
+      CRONSOUL_SECRET_KEY: ${CRONSOUL_SECRET_KEY:-}
+      CRONSOUL_SECRET_KEY_FILE: /data/secret.key
+    volumes:
+      - cronsoul-data:/data
+
+volumes:
+  cronsoul-data:

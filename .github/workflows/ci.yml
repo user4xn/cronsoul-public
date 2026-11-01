@@ -1,0 +1,58 @@
+name: ci
+
+on:
+  push:
+    branches: [master, main, "feat/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Matches the go directive in go.mod; also keeps the module cache keyed
+          # to the exact toolchain the project is developed against.
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: |
+          out="$(gofmt -l .)"
+          if [ -n "$out" ]; then
+            echo "gofmt needed on:"; echo "$out"; exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test
+        run: go test -count=1 ./...
+
+      - name: go test -race
+        run: go test -race -count=1 ./...
+
+      - name: go build
+        run: go build -o /tmp/cronsoul ./cmd/cronsoul
+
+      - name: whitespace check
+        run: git diff --check
+
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # The SPA is plain JS committed into cmd/cronsoul/ui and embedded at build
+      # time, so there is no bundler step - only a syntax gate.
+      - name: node --check
+        run: node --check cmd/cronsoul/ui/app.js

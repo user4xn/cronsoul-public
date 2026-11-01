@@ -1,0 +1,15 @@
+# Keep the build context small; the binary only needs Go sources.
+.git
+.github
+archive/
+research/
+.secrets/
+*.db
+*.db-wal
+*.db-shm
+
+# Design mockups/screenshots under ui/ are NOT embedded (only cmd/cronsoul/ui
+# is), but keep cmd/cronsoul/ui/*.png — the SPA references cronsoul-mark.png and
+# //go:embed would fail without it.
+ui/*.png
+ui/*.html

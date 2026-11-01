@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none"><defs><linearGradient id="mainGrad-master" x1="18%" y1="12%" x2="84%" y2="88%"><stop offset="0%" stop-color="#00f5ff" /><stop offset="52%" stop-color="#2979ff" /><stop offset="100%" stop-color="#7c2ae8" /></linearGradient><linearGradient id="accentGrad-master" x1="30%" y1="10%" x2="75%" y2="85%"><stop offset="0%" stop-color="#00f5ff" stop-opacity="0.95" /><stop offset="100%" stop-color="#2979ff" stop-opacity="0.75" /></linearGradient><linearGradient id="boxGrad-master" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#171c2b" /><stop offset="100%" stop-color="#0d101a" /></linearGradient><filter id="neonGlow-master" x="-25%" y="-25%" width="150%" height="150%"><feGaussianBlur stdDeviation="10" result="blur1" /><feComponentTransfer in="blur1" result="glow1"><feFuncA type="linear" slope="0.45" /></feComponentTransfer><feMerge><feMergeNode in="glow1" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs><rect x="24" y="24" width="464" height="464" rx="96" fill="url(#boxGrad-master)" stroke="#2a324b" stroke-width="6" /><g transform="translate(0, 8)"><g filter="url(#neonGlow-master)"><!-- Outer Gear with 5 Bottom Teeth & Cutout --><path d="M 342.22 219.84 L 347 176.93 A 136 136 0 0 1 389.27 250.89 L 420.3 254.32 A 166 166 0 0 1 420.3 301.68 L 389.27 305.11 A 136 136 0 0 1 369.41 353.06 L 388.92 377.44 A 166 166 0 0 1 355.44 410.92 L 331.06 391.41 A 136 136 0 0 1 283.11 411.27 L 279.68 442.3 A 166 166 0 0 1 232.32 442.3 L 228.89 411.27 A 136 136 0 0 1 180.94 391.41 L 156.56 410.92 A 166 166 0 0 1 123.08 377.44 L 142.59 353.06 A 136 136 0 0 1 122.73 305.11 L 91.7 301.68 A 166 166 0 0 1 91.7 254.32 L 122.73 250.89 A 136 136 0 0 1 172.27 170.83 L 174.05 213.97 A 104 104 0 1 0 342.22 219.84 Z" fill="url(#mainGrad-master)" stroke="url(#mainGrad-master)" stroke-width="10" stroke-linejoin="round" stroke-linecap="round" /><!-- Concentric Inner Ring & Swoop --><path d="
+                M 332 238
+                A 86 86 0 1 1 180 238
+                C 175 215, 186 192, 200 176
+                C 192 204, 198 225, 204 242
+                A 66 66 0 1 0 308 242
+                C 316 218, 314 195, 304 176
+                C 322 192, 335 214, 332 238 Z
+            " fill="url(#mainGrad-master)" /><!-- Main Rising Flame & Inner Loop --><path d="
+                M 266 104
+                C 248 136, 258 168, 282 194
+                C 306 220, 314 252, 300 286
+                A 52 52 0 1 1 206 258
+                C 210 232, 224 212, 218 176
+                C 230 198, 248 214, 255 234
+                C 234 236, 220 254, 222 276
+                A 34 34 0 1 0 288 272
+                C 292 246, 274 224, 252 202
+                C 228 178, 226 132, 266 104 Z
+            " fill="url(#mainGrad-master)" /><!-- Secondary Flame Highlight Tongue --><path d="
+                M 284 146
+                C 280 168, 294 186, 306 208
+                C 318 230, 318 258, 304 282
+                C 308 254, 298 230, 278 208
+                C 262 190, 264 166, 284 146 Z
+            " fill="url(#accentGrad-master)" /></g></g></svg>
