@@ -25,18 +25,19 @@ docker pull ghcr.io/user4xn/cronsoul:vX.Y.Z
 docker pull ghcr.io/user4xn/cronsoul:latest
 ```
 
-The `latest` tag is not guaranteed to exist until the first approved `vX.Y.Z` tag is pushed. Start with the branch image for a local evaluation:
+The `latest` tag is not guaranteed to exist until the first approved `vX.Y.Z` tag is pushed. Start with the branch image for a local evaluation — no environment variables are needed:
 
 ```bash
 docker volume create cronsoul-data
 docker run -d --name cronsoul --restart unless-stopped \
   -p 127.0.0.1:9470:9470 \
   -v cronsoul-data:/data \
-  -e CRONSOUL_ENV=dev \
-  -e CRONSOUL_DB=/data/cronsoul.db \
-  -e CRONSOUL_SECRET_KEY_FILE=/data/secret.key \
   ghcr.io/user4xn/cronsoul:master
 ```
+
+The image ships with `CRONSOUL_ENV=dev`, `CRONSOUL_TLS_MODE=off`, `CRONSOUL_DB=/data/cronsoul.db` and `CRONSOUL_SECRET_KEY_FILE=/data/secret.key`. The key is generated once on the volume, so channel credentials stay readable across restarts. Supply the environment explicitly only when you move to production (see below).
+
+Quote any `docker run` flags before the image name. `docker run image --name x` passes `--name x` to the container process instead of naming the container.
 
 The image is also usable from Compose. The repository's `docker-compose.yml` provides a loopback-only development/evaluation setup and tracks the `master` image. For a stable deployment, change the image to a reviewed version tag, such as `v1.2.3`, before starting the stack.
 
@@ -51,6 +52,8 @@ Open <http://127.0.0.1:9470>. The first boot creates `admin` / `12345678` if the
 ## Environment variables
 
 All names use the `CRONSOUL_` prefix. Values are set explicitly below; do not copy real secrets into shell history, tickets, CI logs, or public issues.
+
+Defaults in the published image are `CRONSOUL_ENV=dev`, `CRONSOUL_TLS_MODE=off`, `CRONSOUL_DB=/data/cronsoul.db` and `CRONSOUL_SECRET_KEY_FILE=/data/secret.key`. A plain `docker run` therefore boots without extra flags; anything reachable beyond localhost should move to the production values below.
 
 | Variable | Default | Purpose / production requirement |
 |---|---|---|

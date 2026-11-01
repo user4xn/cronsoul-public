@@ -27,11 +27,16 @@ COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certifica
 COPY --from=build /usr/share/zoneinfo /usr/share/zoneinfo
 COPY --from=build /out/cronsoul /cronsoul
 
-# The SQLite file must live on a writable mount, never inside the image.
+# Zero-config default: `docker run -p 9470:9470 <image>` must boot for a new
+# user. dev relaxes the production checks (no HTTPS base URL required), and the
+# key file is generated once on the /data volume so channel credentials stay
+# readable across restarts. For any real deployment set CRONSOUL_ENV=production
+# plus BASE_URL, TLS_MODE and an explicit key — see docs/CONTAINER.md.
 ENV CRONSOUL_DB=/data/cronsoul.db \
     CRONSOUL_LISTEN=:9470 \
-    CRONSOUL_ENV=production \
-    CRONSOUL_TLS_MODE=proxy
+    CRONSOUL_ENV=dev \
+    CRONSOUL_TLS_MODE=off \
+    CRONSOUL_SECRET_KEY_FILE=/data/secret.key
 
 VOLUME ["/data"]
 EXPOSE 9470

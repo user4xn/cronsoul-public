@@ -41,12 +41,23 @@ CRONSOUL_DB=./cronsoul.db go run ./cmd/cronsoul
 
 Published image: [`ghcr.io/user4xn/cronsoul`](https://github.com/user4xn/cronsoul/pkgs/container/cronsoul). Compose uses the `master` tag. The `latest` tag is reserved for approved version-tag releases.
 
+No environment variables are required for a first run. The image defaults to `dev` mode, keeps its SQLite database on `/data`, and generates the encryption key once on that volume:
+
 ```bash
-docker pull ghcr.io/user4xn/cronsoul:master
+docker run -d --name cronsoul -p 127.0.0.1:9470:9470 \
+  -v cronsoul-data:/data \
+  ghcr.io/user4xn/cronsoul:master
+```
+
+Open <http://127.0.0.1:9470> and sign in as `admin` / `12345678`; the console forces a password change at first login. The volume keeps jobs, runs, users and the encryption key across restarts and upgrades.
+
+Compose is equivalent:
+
+```bash
 docker compose up -d
 ```
 
-Compose binds to `127.0.0.1:9470` and stores the database and generated encryption key in the `cronsoul-data` volume. This default is for local evaluation only (`CRONSOUL_ENV=dev`, TLS off); do not expose it directly to the internet.
+Both defaults bind to `127.0.0.1:9470` with `CRONSOUL_ENV=dev` and TLS off — local evaluation only. For anything reachable from another machine, follow [Container deployment](docs/CONTAINER.md) and switch to `CRONSOUL_ENV=production` with an HTTPS base URL and a stable key.
 
 See [Container deployment](docs/CONTAINER.md) for production environment variables, reverse-proxy setup, upgrades, backups, and image tags. See [How to use CronSoul](docs/HOW-TO-USE.md) for the full operator guide.
 
