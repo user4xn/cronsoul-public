@@ -52,4 +52,4 @@ This audit does not change repository visibility. Public visibility exposes ever
 
 ## License status
 
-There is no `LICENSE` file. Public visibility does not grant permission to reuse or redistribute the source. Choose a license before describing CronSoul as open source.
+CronSoul is released under the MIT license; see `LICENSE` at the repository root.

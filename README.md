@@ -219,7 +219,7 @@ The public tree is the application source, tests, Docker and Compose files, CI/p
 
 Earlier drafts — mockups, PRDs, brand notes and internal research — were removed before publication, and the public repository starts from a single clean commit. Drafts may still exist in older private history; they are not part of this repository.
 
-There is no `LICENSE` file yet. Public visibility and a public image do not grant permission to reuse or redistribute the source.
+The project is MIT licensed — see [LICENSE](LICENSE).
 
 ---
 
@@ -235,7 +235,7 @@ There is no `LICENSE` file yet. Public visibility and a public image do not gran
 
 ## 📄 License
 
-No license yet — public viewing is not permission to reuse or redistribute.
+MIT — see [LICENSE](LICENSE). Use it, fork it, ship it.
 
 ---
 
