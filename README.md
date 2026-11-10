@@ -37,39 +37,35 @@ No database server, no Node.js, and no separate frontend build step.
 
 ---
 
-## 🐳 Install with Docker (Recommended)
+## 🚀 Try it in two minutes
 
-The image is public and needs no environment variables for a first run. It defaults to `dev`, keeps its database on `/data`, and generates the encryption key once on that volume.
-
-**1. Start the container:**
+This is the evaluation setup: one container, one volume, no configuration. It is **not** a production deployment — see [Running in production](#-running-in-production).
 
 ```bash
 docker run -d --name cronsoul \
   -p 127.0.0.1:9470:9470 \
   -v cronsoul-data:/data \
-  ghcr.io/user4xn/cronsoul-public:master
+  ghcr.io/user4xn/cronsoul-public:latest
 ```
 
-**2. Open the console:**
+Open `http://127.0.0.1:9470` and sign in with `admin` / `12345678`. The console forces a password change before anything else is reachable.
 
-```
-http://127.0.0.1:9470
-```
+What happened behind that command:
 
-**3. Sign in:**
+| Piece | Meaning |
+|---|---|
+| `-p 127.0.0.1:9470:9470` | Only your machine can reach the console. Remove `127.0.0.1` **only** after you put TLS in front (below). |
+| `-v cronsoul-data:/data` | Jobs, runs, users, settings and the encryption key. Delete the volume and you delete the instance. |
+| no `-e` flags | The image defaults to `dev`, TLS off, SQLite at `/data/cronsoul.db`, key at `/data/secret.key` (generated once). |
 
-```
-admin / 12345678
-```
+**Image tags:** `latest` and `0.1.x` are released builds. `master` follows the branch and can be broken — use it only if you are testing the next release.
 
-The console forces a password change at first login. The `cronsoul-data` volume keeps jobs, runs, users and the encryption key across restarts and upgrades.
-
-**Or with Compose:**
+**Or with Compose** (`docker compose up -d`):
 
 ```yaml
 services:
   cronsoul:
-    image: ghcr.io/user4xn/cronsoul-public:master
+    image: ghcr.io/user4xn/cronsoul-public:latest
     container_name: cronsoul
     restart: unless-stopped
     ports:
@@ -81,31 +77,131 @@ volumes:
   cronsoul-data:
 ```
 
-**Quick Start : If you want to use in Production. Need Configure This**
-```yaml
-    ...
-    enviroment:
-      - CRONSOUL_SECRET_KEY = {some_key}
-      - CRONSOUL_BASE_URL = {your.addess.id}
-      - CRONSOUL_TLS_MODE = {cert/proxy}
-      - CRONSOUL_TLS_CERT = {cert_key} //if you choose cert
-    ...
+---
 
+## 🧭 First five minutes inside the console
+
+1. **Change the password**, then add named users under **Users** with the lowest role that fits (`viewer` for read-only, `qa` to trigger runs, `admin` to edit endpoints).
+2. **Allowlist your destination.** Outbound calls are blocked by default. Add the API host — `api.example.com` or `api.example.com:8443` — under **Allowlist** before creating the endpoint.
+3. **Create an endpoint:** key, URL, cron expression, timezone. The schedule preview shows the next real fire times in that timezone.
+4. **Press Play** to queue a manual run. `409` means a singleton endpoint is still running.
+5. **Read the run** in **Runs**: request sent, response excerpt, attempts, assertion results.
+
+> If step 4 fails with *not allowlisted*, you skipped step 2. That is the most common first-run mistake, and it is deliberate: CronSoul will not call a host you have not approved.
+
+---
+
+## 🔧 Running in production
+
+Production is a different mode, not a different image. `CRONSOUL_ENV=production` refuses to start unless the instance is configured safely, so a misconfigured deploy fails loudly at boot instead of serving an insecure console.
+
+Pick **one** of the two TLS paths.
+
+### Option A — TLS terminated by a reverse proxy (recommended)
+
+CronSoul speaks plain HTTP on a private port; Caddy, nginx, Traefik or your platform ingress handles certificates and HTTPS.
+
+```yaml
+services:
+  cronsoul:
+    image: ghcr.io/user4xn/cronsoul-public:latest
+    restart: unless-stopped
+    environment:
+      CRONSOUL_ENV: production
+      CRONSOUL_BASE_URL: https://cron.example.com
+      CRONSOUL_TLS_MODE: proxy
+      CRONSOUL_DB: /data/cronsoul.db
+      CRONSOUL_SECRET_KEY_FILE: /data/secret.key
+    volumes:
+      - cronsoul-data:/data
+    ports:
+      - "127.0.0.1:9470:9470"   # proxy reaches it; the internet does not
+
+volumes:
+  cronsoul-data:
 ```
 
-**Updating:**
+Minimal Caddy in front of it:
+
+```caddyfile
+cron.example.com {
+    reverse_proxy 127.0.0.1:9470
+}
+```
+
+Caddy obtains and renews the certificate itself. With nginx, point `proxy_pass http://127.0.0.1:9470;` at the same address and run certbot.
+
+### Option B — TLS served by CronSoul itself
+
+Only pick this when you cannot run a proxy. CronSoul then loads the certificate and key directly, and **you** own renewal.
+
+```yaml
+services:
+  cronsoul:
+    image: ghcr.io/user4xn/cronsoul-public:latest
+    restart: unless-stopped
+    environment:
+      CRONSOUL_ENV: production
+      CRONSOUL_BASE_URL: https://cron.example.com
+      CRONSOUL_TLS_MODE: cert
+      CRONSOUL_TLS_CERT: /etc/cronsoul/fullchain.pem
+      CRONSOUL_TLS_KEY: /etc/cronsoul/privkey.pem
+      CRONSOUL_DB: /data/cronsoul.db
+      CRONSOUL_SECRET_KEY_FILE: /data/secret.key
+    volumes:
+      - cronsoul-data:/data
+      - /etc/letsencrypt/live/cron.example.com/fullchain.pem:/etc/cronsoul/fullchain.pem:ro
+      - /etc/letsencrypt/live/cron.example.com/privkey.pem:/etc/cronsoul/privkey.pem:ro
+    ports:
+      - "443:9470"
+
+volumes:
+  cronsoul-data:
+```
+
+Which certificate files:
+
+| Variable | File | Notes |
+|---|---|---|
+| `CRONSOUL_TLS_CERT` | `fullchain.pem` | Leaf **plus** intermediate, leaf first. Not the bare leaf, not `chain.pem`, not a CA bundle. |
+| `CRONSOUL_TLS_KEY` | `privkey.pem` | Unencrypted PEM. CronSoul has no passphrase option. |
+
+Let's Encrypt keys are `600 root`. Run the container as root or match the file ownership, otherwise startup fails with `permission denied`.
+
+Verify after boot — this must print `2` (leaf + intermediate):
+
+```bash
+openssl s_client -connect cron.example.com:443 -servername cron.example.com -showcerts </dev/null \
+  | grep -c 'BEGIN CERTIFICATE'
+```
+
+### What production validation actually checks
+
+CronSoul exits at startup if any of these is wrong:
+
+| Check | Failure message |
+|---|---|
+| `CRONSOUL_BASE_URL` set and `https://` | `CRONSOUL_BASE_URL is required` / `must be a valid https URL outside dev` |
+| `CRONSOUL_TLS_MODE` is `proxy` or `cert` | `CRONSOUL_TLS_MODE=off is allowed only in dev` |
+| `cert` mode has both cert and key paths | `TLS cert mode requires CRONSOUL_TLS_CERT and CRONSOUL_TLS_KEY` |
+| `CRONSOUL_DB` is a file, not `:memory:` | `CRONSOUL_DB must point to a file outside dev` |
+| A 32-byte key exists (env or file) | `CRONSOUL_SECRET_KEY or CRONSOUL_SECRET_KEY_FILE is required` |
+
+### Backups
+
+Back up `/data` as a pair — the database **and** `secret.key`. A database without its key cannot decrypt saved notification credentials. Copying the raw `.db` file while CronSoul is running can capture a half-written state; stop the container, or use `sqlite3 cronsoul.db ".backup /tmp/cronsoul-backup.db"`.
+
+### Updating
 
 ```bash
 docker compose pull && docker compose up -d
 ```
 
-`vX.Y.Z` tags are published for reviewed releases; `master` follows the branch and is meant for evaluation.
-
-> The default is loopback-only, `dev`, TLS off. Do not expose it to another machine as-is — see [Security model](#-security-model) and [docs/CONTAINER.md](docs/CONTAINER.md).
+Keep the same `/data` volume. Downgrading is not supported — the schema only moves forward, so restore a matching database backup if you roll the image back.
 
 ---
 
-## 🚀 Quick Start (Build from Source)
+## 🚀 Build from source
 
 ```bash
 git clone https://github.com/user4xn/cronsoul-public
@@ -119,25 +215,12 @@ Open [http://127.0.0.1:9470](http://127.0.0.1:9470). Data stays in memory, which
 make dev-file        # or: CRONSOUL_DB=./cronsoul.db go run ./cmd/cronsoul
 ```
 
-Build a static binary:
+Build a static binary or a local image:
 
 ```bash
-make build           # writes ./cronsoul
+make build                                   # writes ./cronsoul
+docker build -t cronsoul:local .
 ```
-
----
-
-## ⚙️ Setup Guide (5 steps)
-
-**Step 1 — Sign in and change the password.** Use the seeded `admin` account once, set a new password, then add named users under **Users** with the lowest role that fits.
-
-**Step 2 — Allow your destinations.** CronSoul refuses outbound calls unless the host (or `host:port`) is on the **Allowlist**. Add the API hosts your jobs call; private and metadata addresses stay blocked even when listed.
-
-**Step 3 — Create an endpoint.** Give it a key, a URL, a cron expression and a timezone. Add headers, query, body or auth as needed, then set timeout, retries and assertions. The schedule preview shows when it will actually fire.
-
-**Step 4 — Run it once.** Press **Play** to queue a manual run. A `409` means a singleton endpoint is still running. Inspect the result in **Runs**: request, response excerpt, attempts, assertions.
-
-**Step 5 — Wire notifications.** Add an SMTP or Telegram channel under **Channels**, subscribe it to events, send a test, then watch **Alerts** and the outbox. A configured channel is not proof of delivery — test it against a real recipient.
 
 ---
 
@@ -168,22 +251,38 @@ The scheduler ticks inside the same process. Each run is written before and afte
 
 ## ⚙️ Environment Variables
 
-Every variable is optional for a local run. The image sets the first four, so a plain `docker run` works.
+Everything is optional for a local run; the image already sets the first four. The **Production** column is what `CRONSOUL_ENV=production` requires.
 
-| Variable | Default (image) | Description |
+| Variable | Default (image) | Production | Description |
+|---|---|---|---|
+| `CRONSOUL_ENV` | `dev` | `production` | Switches on startup validation. |
+| `CRONSOUL_DB` | `/data/cronsoul.db` | required, file | SQLite path. `:memory:` is rejected outside dev. |
+| `CRONSOUL_SECRET_KEY_FILE` | `/data/secret.key` | one of these | Key file, generated once on the volume and reused. |
+| `CRONSOUL_SECRET_KEY` | _(unset)_ | one of these | Inline alternative: 32 bytes, raw or base64. |
+| `CRONSOUL_TLS_MODE` | `off` | `proxy` or `cert` | `off` is dev-only. |
+| `CRONSOUL_BASE_URL` | _(unset)_ | required | Public HTTPS URL, e.g. `https://cron.example.com`. |
+| `CRONSOUL_TLS_CERT` | _(unset)_ | when `cert` | Path to `fullchain.pem`. |
+| `CRONSOUL_TLS_KEY` | _(unset)_ | when `cert` | Path to unencrypted `privkey.pem`. |
+| `CRONSOUL_LISTEN` | `:9470` | `:9470` | Listen address inside the container. |
+| `CRONSOUL_DISPLAY_TZ` | `Asia/Jakarta` | `Asia/Jakarta` | Default console timezone; changeable in Settings. |
+| `CRONSOUL_SESSION_TTL` | `12h` | `12h` | Session lifetime, Go duration syntax. |
+
+`CRONSOUL_SECRET_KEY` and `CRONSOUL_SECRET_KEY_FILE` are alternatives — set one, not both. Full reference, proxy notes and backup details: [docs/CONTAINER.md](docs/CONTAINER.md).
+
+---
+
+## 🩺 Troubleshooting
+
+| Symptom | Cause | Fix |
 |---|---|---|
-| `CRONSOUL_ENV` | `dev` | `production` enables the full startup validation. |
-| `CRONSOUL_DB` | `/data/cronsoul.db` | SQLite path; outside dev it must be a file, not `:memory:`. |
-| `CRONSOUL_SECRET_KEY_FILE` | `/data/secret.key` | Key file, created once and reused; back it up with the database. |
-| `CRONSOUL_TLS_MODE` | `off` | `proxy` behind a TLS terminator, or `cert`; `off` is dev-only. |
-| `CRONSOUL_BASE_URL` | _(unset)_ | Required outside dev; must be the public HTTPS URL. |
-| `CRONSOUL_SECRET_KEY` | _(unset)_ | Alternative to the key file: 32 bytes, raw or base64. |
-| `CRONSOUL_LISTEN` | `:9470` | Listen address inside the container. |
-| `CRONSOUL_DISPLAY_TZ` | `Asia/Jakarta` | Default console timezone, changeable in Settings. |
-| `CRONSOUL_SESSION_TTL` | `12h` | Session lifetime, Go duration syntax. |
-| `CRONSOUL_TLS_CERT` / `_KEY` | _(unset)_ | Certificate and key paths when `TLS_MODE=cert`. |
-
-Full reference, reverse-proxy example, backup and upgrade notes: [docs/CONTAINER.md](docs/CONTAINER.md).
+| Job fails with *not allowlisted* | Destination host is not on the allowlist | Add the host under **Allowlist** |
+| `CRONSOUL_TLS_MODE=off is allowed only in dev` | `CRONSOUL_ENV=production` with TLS off | Set `CRONSOUL_TLS_MODE=proxy` (or `cert`) |
+| `CRONSOUL_SECRET_KEY ... is required` | Production without a key | Mount `/data/secret.key` or set `CRONSOUL_SECRET_KEY` |
+| Container restarts with `permission denied` in `cert` mode | Let's Encrypt key is `600 root` | Run as root or fix ownership |
+| Login works, console is blank | Stale browser cache after an upgrade | Hard reload; the UI is embedded in the binary |
+| `409` when pressing Play | Singleton endpoint already running | Wait for the current run, or disable singleton |
+| Notification test fails but channel looks configured | Credentials were encrypted with an older key | Re-enter the channel credentials |
+| Everything lost after recreating the container | Volume not mounted | Always mount `/data` |
 
 ---
 
@@ -216,22 +315,13 @@ make dev-file  # run with a local database
 
 `make check` is exactly what CI runs. Tests cover egress policy, retry and assertion logic, scheduler behaviour, and the HTTP handlers.
 
-Build the container locally:
-
-```bash
-docker build -t cronsoul:local .
-docker run --rm -p 127.0.0.1:9470:9470 -v cronsoul-data:/data cronsoul:local
-```
-
 ---
 
 ## 📦 Repository Scope
 
 The public tree is the application source, tests, Docker and Compose files, CI/publish workflows, and the operator documentation under `docs/`. Credentials, databases, generated keys and deployment-specific configuration are not tracked; `.env.example` holds placeholders only.
 
-Earlier drafts — mockups, PRDs, brand notes and internal research — were removed before publication, and the public repository starts from a single clean commit. Drafts may still exist in older private history; they are not part of this repository.
-
-The project is MIT licensed — see [LICENSE](LICENSE).
+Earlier drafts — mockups, PRDs, brand notes and internal research — were removed before publication, and the public repository starts from a single clean commit.
 
 ---
 
@@ -241,7 +331,6 @@ The project is MIT licensed — see [LICENSE](LICENSE).
 - [Container deployment](docs/CONTAINER.md) — environment, TLS, storage, backup, upgrades.
 - [HTTP API](docs/openapi.yaml) — OpenAPI 3 description of the console's routes.
 - [Database schema](docs/cronsoul-schema.sql) — reference; embedded migrations are authoritative.
-- [Public surface audit](docs/PUBLIC-SURFACE.md) — what is tracked and what was removed.
 
 ---
 
