@@ -167,3 +167,24 @@ func TestChangePasswordAcceptsSnakeCaseBody(t *testing.T) {
 		t.Fatalf("new password rejected: %d", resp.StatusCode)
 	}
 }
+
+func TestForcedChangeSkipsCurrentButVoluntaryRequiresIt(t *testing.T) {
+	s, _ := setup(t)
+	ts := httptest.NewServer(s.Router())
+	defer ts.Close()
+	jar, _ := cookiejar.New(nil)
+	c := &http.Client{Jar: jar}
+	_ = req(t, c, "POST", ts.URL+"/login", map[string]string{"username": "admin", "password": "12345678"})
+	if resp := req(t, c, "POST", ts.URL+"/change-password", map[string]string{"new_password": "first-login-pass"}); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("forced change without current=%d", resp.StatusCode)
+	}
+	if resp := req(t, c, "POST", ts.URL+"/change-password", map[string]string{"new_password": "second-change-pass"}); resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("voluntary change without current=%d", resp.StatusCode)
+	}
+	if resp := req(t, c, "POST", ts.URL+"/change-password", map[string]string{"current_password": "first-login-pass", "new_password": "first-login-pass"}); resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("reusing the same password=%d", resp.StatusCode)
+	}
+	if resp := req(t, c, "POST", ts.URL+"/change-password", map[string]string{"current_password": "first-login-pass", "new_password": "second-change-pass"}); resp.StatusCode != http.StatusNoContent {
+		t.Fatalf("voluntary change with current=%d", resp.StatusCode)
+	}
+}

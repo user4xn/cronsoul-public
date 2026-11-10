@@ -59,7 +59,7 @@ Defaults in the published image are `CRONSOUL_ENV=dev`, `CRONSOUL_TLS_MODE=off`,
 |---|---|---|
 | `CRONSOUL_ENV` | `dev` | Set `production` for production validation. |
 | `CRONSOUL_LISTEN` | `:9470` | Address inside the container. Leave this at `:9470` when using published port mapping. |
-| `CRONSOUL_DB` | `:memory:` in dev | Persistent SQLite path, normally `/data/cronsoul.db`. Non-dev must not use in-memory storage. |
+| `CRONSOUL_DB` | `./cronsoul.db` in dev | Persistent SQLite path, normally `/data/cronsoul.db`. Non-dev must not use in-memory storage. |
 | `CRONSOUL_SECRET_KEY_FILE` | unset | Preferred in containers; point to a persistent `/data` file. Generated once if absent and reused. Protect the volume. |
 | `CRONSOUL_SECRET_KEY` | unset | Alternative key source. Must decode to exactly 32 bytes. Use a secret manager, not a committed env file. |
 | `CRONSOUL_BASE_URL` | unset | Required outside dev; must be the public HTTPS URL, e.g. `https://cron.example.com`. |

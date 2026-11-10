@@ -35,6 +35,9 @@ func TestDevDefaultsBootWithoutSecrets(t *testing.T) {
 	if c.SecureCookie {
 		t.Fatal("cookies must not be Secure while TLS is off")
 	}
+	if c.DBPath != "./cronsoul.db" {
+		t.Fatalf("dev must persist to a local file by default, got %q", c.DBPath)
+	}
 }
 
 func TestProductionRequiresHTTPSKeyAndFileDatabase(t *testing.T) {

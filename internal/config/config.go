@@ -53,7 +53,7 @@ func loadOrCreateSecret(path string) (string, bool, error) {
 }
 
 func Load() (Config, error) {
-	c := Config{Env: env("CRONSOUL_ENV", "dev"), BaseURL: os.Getenv("CRONSOUL_BASE_URL"), SecretKey: os.Getenv("CRONSOUL_SECRET_KEY"), SecretKeyFile: os.Getenv("CRONSOUL_SECRET_KEY_FILE"), DBPath: env("CRONSOUL_DB", ":memory:"), TLSMode: env("CRONSOUL_TLS_MODE", "off"), TLSCert: os.Getenv("CRONSOUL_TLS_CERT"), TLSKey: os.Getenv("CRONSOUL_TLS_KEY"), Listen: env("CRONSOUL_LISTEN", ":9470"), DisplayTZ: env("CRONSOUL_DISPLAY_TZ", "Asia/Jakarta"), SessionTTL: 12 * time.Hour}
+	c := Config{Env: env("CRONSOUL_ENV", "dev"), BaseURL: os.Getenv("CRONSOUL_BASE_URL"), SecretKey: os.Getenv("CRONSOUL_SECRET_KEY"), SecretKeyFile: os.Getenv("CRONSOUL_SECRET_KEY_FILE"), DBPath: os.Getenv("CRONSOUL_DB"), TLSMode: env("CRONSOUL_TLS_MODE", "off"), TLSCert: os.Getenv("CRONSOUL_TLS_CERT"), TLSKey: os.Getenv("CRONSOUL_TLS_KEY"), Listen: env("CRONSOUL_LISTEN", ":9470"), DisplayTZ: env("CRONSOUL_DISPLAY_TZ", "Asia/Jakarta"), SessionTTL: 12 * time.Hour}
 	if _, e := time.LoadLocation(c.DisplayTZ); e != nil {
 		return c, fmt.Errorf("CRONSOUL_DISPLAY_TZ: unknown timezone %q", c.DisplayTZ)
 	}
@@ -106,8 +106,12 @@ func Load() (Config, error) {
 	if c.TLSMode == "cert" && (c.TLSCert == "" || c.TLSKey == "") {
 		return c, errors.New("TLS cert mode requires CRONSOUL_TLS_CERT and CRONSOUL_TLS_KEY")
 	}
-	// The default DB is in-memory. Outside dev that would silently discard every
-	// job, run and user on restart, so require an explicit file path instead.
+	// Dev keeps data in a local file so a restart does not wipe it; set
+	// CRONSOUL_DB=:memory: explicitly for a throwaway run. Outside dev an
+	// in-memory database would silently discard everything, so require a file.
+	if c.Env == "dev" && strings.TrimSpace(c.DBPath) == "" {
+		c.DBPath = "./cronsoul.db"
+	}
 	if c.Env != "dev" && (c.DBPath == ":memory:" || strings.TrimSpace(c.DBPath) == "") {
 		return c, errors.New("CRONSOUL_DB must point to a file outside dev")
 	}

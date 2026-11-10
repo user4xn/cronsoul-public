@@ -890,3 +890,41 @@ button.ghost[disabled]{opacity:.5;cursor:not-allowed}
 #content > .table-card .list-row strong{font-size:12.5px}
 #content > .table-card .list-row .dim{font-size:11.5px}
 #content > .table-card .table-title{padding-bottom:var(--sp-3)}
+
+.list-rows{display:flex;flex-direction:column}
+.list-row{display:flex;align-items:center;gap:10px;padding:10px var(--sp-4);min-width:0}
+.list-row + .list-row{border-top:1px solid var(--line-soft)}
+.list-row strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.list-row .dim{margin-left:auto;white-space:nowrap;font-variant-numeric:tabular-nums}
+.list-row .pill{flex:none}
+.tl-hour-panel .list-row .dim{margin-left:auto}
+
+.fgrid + .fgrid,.fgrid + .field.wide{margin-top:var(--sp-4)}
+.field.wide{margin-bottom:0}
+.sect-title + .fgrid{margin-top:var(--sp-2)}
+details.fs + .sect-title,.field.wide + details.fs{margin-top:var(--sp-4)}
+.paste-row{display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;margin-top:var(--sp-2)}
+.paste-row #curl-hint{flex:1 1 200px;min-width:0}
+.paste-row #curl-auth:empty{display:none}
+.paste-row #curl-parse{flex:none}
+.switch-row + .fgrid{margin-top:var(--sp-3)}
+
+.form-foot{display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4);flex-wrap:wrap;margin-top:var(--sp-5);padding-top:var(--sp-4);border-top:1px solid var(--line-soft)}
+.form-foot>.muted{flex:1 1 280px;min-width:0;font-size:12px;line-height:1.55}
+.foot-actions{display:flex;align-items:center;gap:var(--sp-2);flex:none}
+.rail-card .hint{display:block;line-height:1.5}
+.rail-runs + .hint:not(:empty){margin-top:var(--sp-2);padding-top:var(--sp-2);border-top:1px solid var(--line-soft)}
+.rail-card .ghost.wide{margin-top:var(--sp-2)}
+#r-test-out:not(:empty){margin-top:var(--sp-2)}
+
+.sim-guide{margin-top:var(--sp-4)}
+.sim-rules{margin:0 0 var(--sp-3);padding-left:18px;display:flex;flex-direction:column;gap:8px;font-size:12px;line-height:1.6;color:var(--text-dim)}
+.sim-rules strong{color:var(--text)}
+.sim-tabs{display:flex;align-items:center;gap:4px;margin-bottom:var(--sp-2)}
+.sim-tabs .seg-btn{font:inherit;font-size:12px;padding:5px 10px;border:1px solid var(--line-soft);border-radius:var(--r-md);background:transparent;color:var(--text-dim);min-height:0}
+.sim-tabs .seg-btn.active{color:var(--text);border-color:var(--accent-dim);background:var(--ink-2)}
+.sim-tabs .sg-copy{margin-left:auto;padding:5px 10px;font-size:12px}
+pre.sim-code{max-height:420px;white-space:pre;overflow:auto;tab-size:4}
+
+.modal:not(.is-wide){scrollbar-gutter:auto}
+.modal form > button.wide{margin-top:var(--sp-2)}

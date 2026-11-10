@@ -179,12 +179,12 @@ paths:
             schema:
               type: object
               required:
-              - current_password
               - new_password
               properties:
                 current_password:
                   type: string
                   format: password
+                  description: Required for a voluntary change; ignored during the forced first-login change.
                 new_password:
                   type: string
                   format: password

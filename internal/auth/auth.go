@@ -206,8 +206,18 @@ func (s *Service) change(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var h string
-	if s.DB.QueryRow("SELECT password_hash FROM users WHERE id=?", u.ID).Scan(&h) != nil || !store.VerifyPassword(h, in.CurrentPassword) {
+	if s.DB.QueryRow("SELECT password_hash FROM users WHERE id=?", u.ID).Scan(&h) != nil {
 		http.Error(w, "invalid credentials", 401)
+		return
+	}
+	// A forced change happens right after logging in with the temporary
+	// password, so asking for it again adds nothing. Voluntary changes still do.
+	if !u.Must && !store.VerifyPassword(h, in.CurrentPassword) {
+		http.Error(w, "invalid credentials", 401)
+		return
+	}
+	if store.VerifyPassword(h, in.NewPassword) {
+		http.Error(w, "new password must differ from the current one", 400)
 		return
 	}
 	nh, e := store.HashPassword(in.NewPassword)

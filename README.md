@@ -81,6 +81,18 @@ volumes:
   cronsoul-data:
 ```
 
+**Quick Start : If you want to use in Production. Need Configure This**
+```yaml
+    ...
+    enviroment:
+      - CRONSOUL_SECRET_KEY = {some_key}
+      - CRONSOUL_BASE_URL = {your.addess.id}
+      - CRONSOUL_TLS_MODE = {cert/proxy}
+      - CRONSOUL_TLS_CERT = {cert_key} //if you choose cert
+    ...
+
+```
+
 **Updating:**
 
 ```bash

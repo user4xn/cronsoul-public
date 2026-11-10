@@ -64,8 +64,7 @@ function changePassword(){app.innerHTML=`<main class="login"><div class="login-s
   <form class="login-card" id="change" novalidate>
     <h2>Update password</h2>
     <p class="muted">Required before you can continue.</p>
-    <div class="field"><label for="change-current">Current password</label><span class="pw"><input id="change-current" name="current_password" type="password" autocomplete="current-password" required autofocus><button type="button" class="pw-toggle" data-pw="change-current" aria-label="Show password" aria-pressed="false">${PW_EYE}</button></span></div>
-    <div class="field"><label for="change-new">New password</label><span class="pw"><input id="change-new" name="new_password" type="password" minlength="10" autocomplete="new-password" required><button type="button" class="pw-toggle" data-pw="change-new" aria-label="Show password" aria-pressed="false">${PW_EYE}</button></span></div>
+    <div class="field"><label for="change-new">New password</label><span class="pw"><input id="change-new" name="new_password" type="password" minlength="10" autocomplete="new-password" required autofocus><button type="button" class="pw-toggle" data-pw="change-new" aria-label="Show password" aria-pressed="false">${PW_EYE}</button></span></div>
     <div id="err" class="error" role="alert" aria-live="polite"></div>
     <button class="primary" type="submit"><span class="spin" aria-hidden="true"></span><span class="btn-label">Update password</span></button>
     <p class="login-note">This changes the password for your operator account only.</p>
@@ -366,6 +365,7 @@ function endpointForm(job){
                 <div class="field"><label for="f-dry">Dry-run parameter</label><input id="f-dry" name="dry_run_param" placeholder="dry_run"><span class="hint">Query parameter appended for dry runs, so the endpoint can validate without writing.</span></div>
               </div>
               <div class="rail-note">Simulation is opt-in per endpoint. In production the run also needs <code>allow_simulated_time_prod</code>, so a stray header can never rewrite data.</div>
+              ${simGuideHtml()}
             </section>
           </div>
         </div>
@@ -411,6 +411,7 @@ function endpointForm(job){
   document.getElementById('f-cron')?.dispatchEvent(new Event('input'));
   document.getElementById('f-tz')?.dispatchEvent(new Event('input'));
   wireFormRail(job);
+  wireSimGuide();
 
   $('#endpoint').onsubmit=async e=>{
     e.preventDefault();
@@ -430,6 +431,127 @@ function endpointForm(job){
       state.page='endpoints';render();
     }catch(err){notify(err.message)}
   };
+}
+
+const SIM_LANGS=[['go','Go'],['php','PHP'],['js','Node.js']];
+
+function simGuideCode(lang,header,param){
+  const h=header||'X-Simulated-Time',p=param||'dry_run';
+  if(lang==='go')return `// net/http
+func syncOrders(w http.ResponseWriter, r *http.Request) {
+	now := time.Now()
+	if v := r.Header.Get("${h}"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			http.Error(w, "bad ${h}", http.StatusBadRequest)
+			return
+		}
+		now = t // use this clock for every date decision
+	}
+	dryRun := r.URL.Query().Get("${p}") == "true"
+
+	orders, err := findDueOrders(r.Context(), now)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !dryRun {
+		if err := markSynced(r.Context(), orders); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]any{
+		"ok": true, "now": now.Format(time.RFC3339),
+		"dry_run": dryRun, "would_process": len(orders),
+	})
+}`;
+  if(lang==='php')return `<?php
+// plain PHP; in Laravel use $request->header('${h}') / $request->query('${p}')
+$header = $_SERVER['HTTP_${h.toUpperCase().replace(/-/g,'_')}'] ?? null;
+$now = new DateTimeImmutable('now');
+if ($header !== null) {
+    $parsed = DateTimeImmutable::createFromFormat(DATE_RFC3339, $header);
+    if ($parsed === false) {
+        http_response_code(400);
+        exit('bad ${h}');
+    }
+    $now = $parsed; // use this clock for every date decision
+}
+$dryRun = ($_GET['${p}'] ?? '') === 'true';
+
+$orders = findDueOrders($now);
+if (!$dryRun) {
+    markSynced($orders);
+}
+
+header('Content-Type: application/json');
+echo json_encode([
+    'ok' => true,
+    'now' => $now->format(DATE_RFC3339),
+    'dry_run' => $dryRun,
+    'would_process' => count($orders),
+]);`;
+  return `// Express
+app.post('/v1/sync', async (req, res) => {
+  let now = new Date();
+  const header = req.get('${h}');
+  if (header) {
+    const t = new Date(header);
+    if (Number.isNaN(t.getTime())) return res.status(400).send('bad ${h}');
+    now = t; // use this clock for every date decision
+  }
+  const dryRun = req.query['${p}'] === 'true';
+
+  const orders = await findDueOrders(now);
+  if (!dryRun) await markSynced(orders);
+
+  res.json({
+    ok: true,
+    now: now.toISOString(),
+    dry_run: dryRun,
+    would_process: orders.length,
+  });
+});`;
+}
+
+function simGuideHtml(){
+  return `<details class="fs sim-guide">
+    <summary><h3>Make your endpoint support this</h3><span class="muted">What CronSoul sends and how to read it</span></summary>
+    <div class="fs-body">
+      <ul class="sim-rules">
+        <li><strong>Simulated time</strong> — when QA runs this endpoint with a simulated time, CronSoul sends <code id="sg-h">X-Simulated-Time</code> with an RFC3339 value, e.g. <code>2026-01-31T23:59:00+07:00</code>. Scheduled runs never send it. Templates <code>{{simulated_time}}</code>, <code>{{now}}</code>, <code>{{date}}</code> and <code>{{unix}}</code> in headers, query and body use the same clock.</li>
+        <li><strong>Dry run</strong> — CronSoul adds <code>?<span id="sg-p">dry_run</span>=true</code> to the URL. Do all reads and validation, skip every write and side effect (DB, queues, email, payments), and still answer 2xx so assertions can run.</li>
+        <li><strong>To qualify</strong>, the endpoint must: take "now" from the header when it is present instead of the system clock, apply it everywhere a date is decided, reject a malformed value with 400, and never ignore the dry-run flag. Ideally only honour the header outside production, or behind an auth check.</li>
+        <li>Return what you would have done (e.g. <code>would_process</code>) so QA can assert on it with a JSON-path rule.</li>
+      </ul>
+      <div class="sim-tabs" role="tablist" aria-label="Sample language">
+        ${SIM_LANGS.map(([k,l],i)=>`<button type="button" class="seg-btn ${i===0?'active':''}" role="tab" data-sg-lang="${k}">${l}</button>`).join('')}
+        <button type="button" class="ghost sg-copy" id="sg-copy">Copy</button>
+      </div>
+      <pre class="excerpt sim-code" id="sg-code"></pre>
+    </div>
+  </details>`;
+}
+
+function wireSimGuide(){
+  const code=$('#sg-code');if(!code)return;
+  let lang='go';
+  const hIn=$('#f-sim'),pIn=$('#f-dry');
+  const draw=()=>{
+    const h=(hIn?.value||'').trim()||'X-Simulated-Time',p=(pIn?.value||'').trim()||'dry_run';
+    $('#sg-h').textContent=h;$('#sg-p').textContent=p;
+    code.textContent=simGuideCode(lang,h,p);
+  };
+  document.querySelectorAll('[data-sg-lang]').forEach(b=>b.onclick=()=>{
+    lang=b.dataset.sgLang;
+    document.querySelectorAll('[data-sg-lang]').forEach(x=>x.classList.toggle('active',x===b));
+    draw();
+  });
+  hIn?.addEventListener('input',draw);pIn?.addEventListener('input',draw);
+  $('#sg-copy').onclick=async()=>notify(await copyText(code.textContent)?'Sample copied':'Copy failed');
+  draw();
 }
 
 const ASSERT_KINDS=[

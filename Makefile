@@ -2,7 +2,7 @@ BIN := cronsoul
 
 .PHONY: dev dev-file build test race vet fmt check
 
-# Zero-config run: dev mode derives a secret key and keeps everything in memory.
+# Zero-config run: dev mode derives a secret key and stores data in ./cronsoul.db.
 dev:
 	go run ./cmd/cronsoul
 
