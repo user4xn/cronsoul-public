@@ -124,11 +124,10 @@ func (a *API) outbox(w http.ResponseWriter, r *http.Request) {
 	write(w, 200, map[string]any{"data": data, "status": status})
 }
 
+// updateScheduler turns background scheduling on or off. This is an operational
+// switch (maintenance windows, post-deploy start), not a security control, so it
+// is allowed in every environment; each change is audited and persisted.
 func (a *API) updateScheduler(w http.ResponseWriter, r *http.Request) {
-	if a.Env == "prod" || a.Env == "production" {
-		write(w, http.StatusForbidden, map[string]string{"error": "scheduler changes are disabled in production"})
-		return
-	}
 	var req struct {
 		Enabled *bool `json:"enabled"`
 	}

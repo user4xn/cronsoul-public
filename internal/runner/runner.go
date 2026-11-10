@@ -19,12 +19,12 @@ import (
 )
 
 var (
-	ErrRedirect         = errors.New("redirect ditolak")
-	ErrNotAllowlisted   = errors.New("host tidak ada di allowlist")
-	ErrBlockedIP        = errors.New("alamat IP diblokir")
-	ErrInsecure         = errors.New("http membutuhkan mode uji aktif")
-	ErrBodyTooLarge     = errors.New("request body terlalu besar")
-	ErrResponseTooLarge = errors.New("response body terlalu besar")
+	ErrRedirect         = errors.New("blocked: redirects are not followed")
+	ErrNotAllowlisted   = errors.New("blocked: host not on allowlist")
+	ErrBlockedIP        = errors.New("blocked: IP address not permitted")
+	ErrInsecure         = errors.New("blocked: plain HTTP needs insecure test mode")
+	ErrBodyTooLarge     = errors.New("request body too large")
+	ErrResponseTooLarge = errors.New("response body too large")
 )
 
 const maxResponseBytes int64 = 1 << 20

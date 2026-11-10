@@ -80,6 +80,7 @@ type Job struct {
 	NextRunAt              string          `json:"next_run_at,omitempty"`
 	LastRunStatus          string          `json:"last_run_status,omitempty"`
 	LastRunAt              string          `json:"last_run_at,omitempty"`
+	LastRunError           string          `json:"last_run_error,omitempty"`
 	AssertionCount         int             `json:"assertion_count"`
 	CreatedAt              string          `json:"created_at"`
 	UpdatedAt              string          `json:"updated_at"`
@@ -757,14 +758,14 @@ func nextRunAt(j Job, now time.Time) string {
 	return next.UTC().Format(time.RFC3339)
 }
 
-type lastRun struct{ status, at string }
+type lastRun struct{ status, at, err string }
 
 // lastRuns returns the newest run per endpoint in one query, so the inventory can
 // show "failed 12m ago" without an N+1.
 func lastRuns(db *sql.DB) map[string]lastRun {
 	out := map[string]lastRun{}
-	rows, err := db.Query(`SELECT job_id,status,created_at FROM (
-		SELECT job_id,status,created_at,ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY created_at DESC) rn FROM runs
+	rows, err := db.Query(`SELECT job_id,status,created_at,COALESCE(error,'') FROM (
+		SELECT job_id,status,created_at,error,ROW_NUMBER() OVER (PARTITION BY job_id ORDER BY created_at DESC) rn FROM runs
 	) WHERE rn=1`)
 	if err != nil {
 		return out
@@ -773,7 +774,7 @@ func lastRuns(db *sql.DB) map[string]lastRun {
 	for rows.Next() {
 		var id string
 		var st lastRun
-		if rows.Scan(&id, &st.status, &st.at) == nil {
+		if rows.Scan(&id, &st.status, &st.at, &st.err) == nil {
 			out[id] = st
 		}
 	}
@@ -830,7 +831,7 @@ func list(db *sql.DB) http.HandlerFunc {
 		for i := range data {
 			data[i].NextRunAt = nextRunAt(data[i], now)
 			if st, ok := last[data[i].ID]; ok {
-				data[i].LastRunStatus, data[i].LastRunAt = st.status, st.at
+				data[i].LastRunStatus, data[i].LastRunAt, data[i].LastRunError = st.status, st.at, st.err
 			}
 			if data[i].Assertions != nil {
 				data[i].AssertionCount = len(data[i].Assertions.Rules)

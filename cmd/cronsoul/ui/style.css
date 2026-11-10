@@ -928,3 +928,47 @@ pre.sim-code{max-height:420px;white-space:pre;overflow:auto;tab-size:4}
 
 .modal:not(.is-wide){scrollbar-gutter:auto}
 .modal form > button.wide{margin-top:var(--sp-2)}
+
+/* F3: live egress check under the endpoint URL */
+.egress-check{display:flex;align-items:center;flex-wrap:wrap;gap:8px 10px;margin-top:6px;padding:9px 11px;border:1px solid var(--line-soft);border-radius:var(--r-md);background:var(--ink-1);font-size:12px;line-height:1.5;color:var(--text-dim)}
+.egress-check[hidden]{display:none}
+.egress-check>span:nth-child(2){flex:1 1 220px;min-width:0}
+.egress-check.warn{border-color:oklch(0.50 0.09 70);background:oklch(0.25 0.04 70 / .5)}
+.egress-check.bad{border-color:oklch(0.42 0.09 25);background:oklch(0.24 0.03 25)}
+.egress-check button{flex:none;padding:6px 10px;font-size:12px}
+
+/* F4: why a run never got an HTTP response */
+.run-reason{display:block;margin-top:5px;max-width:34ch;font-size:11px;line-height:1.4;color:oklch(0.82 0.10 25);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.run-reason a{color:inherit;text-decoration:underline}
+.callout-help{margin-top:6px !important;font-size:12px;color:var(--text-dim) !important}
+.callout-help a{color:var(--accent)}
+
+/* F5: tier legend */
+.tier-legend{display:flex;align-items:center;flex-wrap:wrap;gap:6px 16px;margin:0 0 var(--sp-3);font-size:11.5px;color:var(--text-dim)}
+.tier-legend>span{display:inline-flex;align-items:center;gap:6px}
+.tier-legend .dim{flex-basis:100%;font-size:11px}
+.th-help{cursor:help;border-bottom:1px dotted var(--text-faint)}
+.tier{cursor:help}
+
+/* F6: the legend swatch had class "empty" and inherited the 32px empty-state padding */
+.tl-legend .lg{flex:none;padding:0}
+
+/* F7: settings rhythm — badge aligned with the title, even gaps, room to breathe */
+.runtime-overview,.runtime-controls{gap:var(--sp-4);margin-bottom:var(--sp-4)}
+.runtime-overview>.card,.runtime-controls>.card{margin-bottom:0;padding:var(--sp-5)}
+.runtime-card-head{align-items:center;gap:var(--sp-4)}
+.runtime-card-head>div{display:flex;flex-direction:column;gap:4px;min-width:0}
+.runtime-card-head h2{margin:0}
+.runtime-card-head>.pill{align-self:center}
+.runtime-controls .actions{display:flex;flex-wrap:wrap;justify-content:flex-start;gap:var(--sp-3);padding-top:var(--sp-4)}
+.runtime-controls .actions button{flex:1 1 120px;justify-content:center}
+.tz-row{gap:var(--sp-4)}
+.runtime-note{margin:0 0 var(--sp-4);padding:9px 11px;border-left:2px solid oklch(0.55 0.10 70);background:var(--ink-0);border-radius:0 var(--r-sm) var(--r-sm) 0;font-size:12px;line-height:1.55;color:var(--text-dim)}
+.build-card{padding:var(--sp-5)}
+.build-links{display:flex;flex-wrap:wrap;gap:6px 10px;font-size:12px}
+
+/* toasts sit clear of the page edge and below-the-fold cards stay reachable */
+.toast-stack{right:var(--sp-5);bottom:var(--sp-5)}
+.toast-message{font-size:12.5px;line-height:1.5}
+.main{padding-bottom:calc(var(--sp-7) + 24px)}
+@media(max-width:680px){.toast-stack{left:var(--sp-3);right:var(--sp-3);bottom:var(--sp-3)}.runtime-overview>.card,.runtime-controls>.card{padding:var(--sp-4)}}

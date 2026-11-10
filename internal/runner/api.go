@@ -7,8 +7,10 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -51,6 +53,35 @@ func RegisterRoutes(r chi.Router, x *API, a *auth.Service) {
 	r.With(auth.RequireRole(a, "viewer")).Get("/runs/{id}", x.detail)
 	r.With(auth.RequireRole(a, "qa")).Post("/jobs/{id}/run", x.run)
 	r.With(auth.RequireRole(a, "qa")).Post("/jobs/{id}/preview", x.preview)
+	r.With(auth.RequireRole(a, "qa")).Get("/egress/check", x.egressCheck)
+}
+
+// egressCheck tells the endpoint form, before anything is saved, whether the
+// live egress policy would let a run reach this URL. Without it the first sign
+// of an allowlist problem was a failed run.
+func (a *API) egressCheck(w http.ResponseWriter, r *http.Request) {
+	raw := strings.TrimSpace(r.URL.Query().Get("url"))
+	u, err := url.ParseRequestURI(raw)
+	if err != nil || u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") {
+		out(w, http.StatusBadRequest, map[string]string{"error": "url must be an absolute http(s) URL"})
+		return
+	}
+	policy := a.Egress
+	if a.Policy != nil {
+		policy = a.Policy()
+	}
+	host, port := hostPort(u)
+	suggest := host
+	if port != "443" {
+		suggest = net.JoinHostPort(host, port)
+	}
+	resp := map[string]any{"allowed": true, "host": host, "port": port, "suggested_pattern": suggest, "allowlist_empty": len(policy.Allowlist) == 0}
+	if err := policy.ValidateURL(raw, time.Now()); err != nil {
+		resp["allowed"] = false
+		resp["reason"] = err.Error()
+		resp["not_allowlisted"] = errors.Is(err, ErrNotAllowlisted)
+	}
+	out(w, http.StatusOK, resp)
 }
 
 // NewAPIFromAPI preserves a standalone router for tests and embedders.
@@ -416,6 +447,7 @@ func (a *API) execute(ctx context.Context, id, jobID, actorID string) {
 		query[dryParam.String] = "true"
 	}
 	excerptRequest := requestExcerpt(method, withQuery(rawURL, query))
+	trigger := a.runTrigger(id)
 	for attempt := completedAttempts + 1; ; attempt++ {
 		if attempt > 1 {
 			if _, e := a.DB.Exec(`UPDATE runs SET status='running',attempts=?,started_at=? WHERE id=?`, attempt, time.Now().UTC().Format(time.RFC3339), id); e != nil {
@@ -424,7 +456,7 @@ func (a *API) execute(ctx context.Context, id, jobID, actorID string) {
 		}
 
 		started := time.Now().UTC().Format(time.RFC3339)
-		res, err := a.do(ctx, Request{Method: method, URL: rawURL, Headers: headers, Query: query, Body: body, Auth: authCfg, Timeout: time.Duration(timeout) * time.Second, RunID: id, Trigger: "manual", TriggeredBy: actorID, IdempotencyKey: id, MaxResponse: 32 << 10, SimulatedTime: func() string {
+		res, err := a.do(ctx, Request{Method: method, URL: rawURL, Headers: headers, Query: query, Body: body, Auth: authCfg, Timeout: time.Duration(timeout) * time.Second, RunID: id, Trigger: trigger, TriggeredBy: actorID, IdempotencyKey: id, MaxResponse: 32 << 10, SimulatedTime: func() string {
 			if simulatedTime.Valid {
 				return simulatedTime.String
 			}
@@ -503,9 +535,26 @@ func (a *API) execute(ctx context.Context, id, jobID, actorID string) {
 				log.Printf("notify: recovery enqueue for run %s: %v", id, err)
 			}
 		}
+		// A person pressed Play and is waiting for the outcome. Failures already
+		// go out as "failure", so manual_run covers the silent case: success.
+		if status == "success" && completedAttempts == 0 && trigger == "manual" {
+			if err := notify.Enqueue(a.DB, "manual_run", jobID, id,
+				map[string]string{"message": a.alertText("manual_run", jobID, id, status, hs, msg, res, attempt)}, time.Now().UTC()); err != nil {
+				log.Printf("notify: manual run enqueue for run %s: %v", id, err)
+			}
+		}
 		return
 	}
 }
+func (a *API) runTrigger(id string) string {
+	var trigger sql.NullString
+	_ = a.DB.QueryRow(`SELECT trigger FROM runs WHERE id=?`, id).Scan(&trigger)
+	if trigger.String == "" {
+		return "manual"
+	}
+	return trigger.String
+}
+
 func (a *API) finish(id, status string, hs any, msg any) error {
 	_, err := a.DB.Exec(`UPDATE runs SET status=?,finished_at=?,http_status=?,error=? WHERE id=?`, status, time.Now().UTC().Format(time.RFC3339), hs, msg, id)
 	return err
@@ -528,6 +577,9 @@ func (a *API) alertText(kind, jobID, runID, status string, httpStatus, errVal an
 		"assertion_failed": "🟠 CronSoul · assertion failed",
 		"recovered":        "🟢 CronSoul · run recovered",
 	}[kind]
+	if kind == "manual_run" {
+		head = "🟢 CronSoul · manual run succeeded"
+	}
 	if head == "" {
 		head = "CronSoul · " + kind
 	}

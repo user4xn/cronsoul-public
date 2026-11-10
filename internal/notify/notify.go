@@ -56,7 +56,11 @@ type Meta struct {
 }
 
 // EventKinds are the run outcomes a channel can subscribe to.
-var EventKinds = []string{"failure", "recovered", "missed_run", "assertion_failed"}
+var EventKinds = []string{"failure", "recovered", "missed_run", "assertion_failed", "manual_run"}
+
+// DefaultEventKinds is what a channel receives when it has no explicit list.
+// manual_run is opt-in so existing channels do not start getting every Play.
+var DefaultEventKinds = []string{"failure", "recovered", "missed_run", "assertion_failed"}
 
 type API struct {
 	DB     *sql.DB
@@ -172,7 +176,7 @@ type input struct {
 func channelEvents(raw string) []string {
 	var ev []string
 	if raw == "" || json.Unmarshal([]byte(raw), &ev) != nil || len(ev) == 0 {
-		return append([]string{}, EventKinds...)
+		return append([]string{}, DefaultEventKinds...)
 	}
 	return ev
 }
@@ -180,7 +184,7 @@ func channelEvents(raw string) []string {
 func encodeEvents(in []string) (string, error) {
 	ev := in
 	if len(ev) == 0 {
-		ev = EventKinds
+		ev = DefaultEventKinds
 	}
 	out := []string{}
 	for _, e := range ev {
@@ -505,14 +509,11 @@ func enqueueConfigured(db *sql.DB, kind, job, run string, payload map[string]str
 }
 
 // subscribes reports whether a channel wants this event. An empty or unreadable
-// list means "everything", so a freshly created channel never goes silent.
+// list means the default set, so a freshly created channel never goes silent.
 func subscribes(eventsJSON, kind string) bool {
-	if eventsJSON == "" {
-		return true
-	}
 	var ev []string
-	if json.Unmarshal([]byte(eventsJSON), &ev) != nil || len(ev) == 0 {
-		return true
+	if eventsJSON == "" || json.Unmarshal([]byte(eventsJSON), &ev) != nil || len(ev) == 0 {
+		return contains(DefaultEventKinds, kind)
 	}
 	return contains(ev, kind)
 }

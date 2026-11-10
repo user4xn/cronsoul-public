@@ -92,16 +92,42 @@ func TestSecurityUsesEnvironmentAndExpires(t *testing.T) {
 	}
 }
 
-func TestUpdateSchedulerRejectsProductionAndInvalidBody(t *testing.T) {
+// F1: the scheduler switch works in production and is audited.
+func TestUpdateSchedulerAllowedInProductionAndAudited(t *testing.T) {
 	db := opsDB(t)
-	prod := &API{DB: db, Env: "production"}
+	h, _ := store.HashPassword("a-strong-password")
+	uid := store.ID()
+	if _, err := db.Exec("INSERT INTO users(id,username,password_hash,role,must_change_password) VALUES(?,?,?,?,0)", uid, "sched-root", h, "superadmin"); err != nil {
+		t.Fatal(err)
+	}
+	raw := []byte("0123456789abcdef0123456789abcdef")
+	sum := sha256.Sum256(raw)
+	if _, err := db.Exec("INSERT INTO sessions(id,user_id,token_hash,expires_at) VALUES(?,?,?,?)", store.ID(), uid, hex.EncodeToString(sum[:]), time.Now().Add(time.Hour).UTC().Format(time.RFC3339)); err != nil {
+		t.Fatal(err)
+	}
+	r := chi.NewRouter()
+	RegisterRoutes(r, db, &auth.Service{DB: db, TTL: time.Hour}, "production")
+	req := governanceRequest(http.MethodPatch, "/settings/scheduler", map[string]any{"enabled": true})
+	req.AddCookie(&http.Cookie{Name: "cs_session", Value: hex.EncodeToString(raw)})
 	w := httptest.NewRecorder()
-	prod.updateScheduler(w, governanceRequest(http.MethodPatch, "/settings/scheduler", map[string]any{"enabled": true}))
-	if w.Code != http.StatusForbidden {
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
 		t.Fatalf("production status=%d body=%s", w.Code, w.Body)
 	}
+	var value string
+	if err := db.QueryRow("SELECT value FROM settings WHERE key='scheduler.enabled'").Scan(&value); err != nil || value != "true" {
+		t.Fatalf("scheduler.enabled=%q err=%v", value, err)
+	}
+	var n int
+	if err := db.QueryRow("SELECT COUNT(*) FROM audit_log WHERE action='settings.scheduler.update'").Scan(&n); err != nil || n != 1 {
+		t.Fatalf("audit rows=%d err=%v", n, err)
+	}
+}
+
+func TestUpdateSchedulerRejectsInvalidBody(t *testing.T) {
+	db := opsDB(t)
 	dev := &API{DB: db, Env: "dev"}
-	w = httptest.NewRecorder()
+	w := httptest.NewRecorder()
 	dev.updateScheduler(w, governanceRequest(http.MethodPatch, "/settings/scheduler", map[string]any{"enabled": "yes"}))
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("invalid body status=%d body=%s", w.Code, w.Body)

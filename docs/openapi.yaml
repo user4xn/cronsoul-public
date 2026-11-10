@@ -457,6 +457,34 @@ paths:
         '409':
           description: Singleton job already running
           content: *id001
+  /api/v1/egress/check:
+    get:
+      tags: [Runs]
+      summary: Check a URL against the live egress policy
+      description: Lets the endpoint form warn before saving when a run would be refused (allowlist, scheme, blocked IP). Requires qa or higher.
+      parameters:
+      - in: query
+        name: url
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Policy verdict
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  allowed: {type: boolean}
+                  host: {type: string}
+                  port: {type: string}
+                  suggested_pattern: {type: string, description: Allowlist pattern that would admit this URL}
+                  allowlist_empty: {type: boolean}
+                  not_allowlisted: {type: boolean}
+                  reason: {type: string, example: 'blocked: host not on allowlist'}
+        '400':
+          description: url is not an absolute http(s) URL
   /api/v1/jobs/{id}/preview:
     parameters:
     - in: path
@@ -1635,8 +1663,10 @@ components:
           type: boolean
         events:
           type: array
+          description: Subset of failure, recovered, missed_run, assertion_failed, manual_run. Empty means the first four; manual_run (successful Play) is opt-in.
           items:
             type: string
+            enum: [failure, recovered, missed_run, assertion_failed, manual_run]
         config:
           type: object
           description: Transport credentials; encrypted before storage

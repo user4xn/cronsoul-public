@@ -37,6 +37,8 @@ CronSoul blocks outbound targets unless their host/port is allowed. Before creat
 3. Avoid broad wildcard patterns unless necessary; inspect the effective host/port carefully.
 4. Private, loopback, link-local, multicast, and cloud metadata address ranges remain subject to mandatory blocks even if someone adds an allowlist entry.
 
+An empty allowlist refuses every run. The endpoint form checks the URL against the allowlist as you type and, for a superadmin, offers to add the missing host. A refused run shows **Blocked: host not on allowlist** in Runs and in the run detail instead of an HTTP code.
+
 CronSoul rejects redirects, applies request timeouts, and limits response size. Use HTTPS targets. Plain HTTP is only available in the explicitly time-limited test mode where supported.
 
 ## 4. Create an endpoint
@@ -50,6 +52,10 @@ CronSoul rejects redirects, applies request timeouts, and limits response size. 
 7. Add assertions only when their expected response behavior is clear. Assertions are reported separately from HTTP success.
 8. Save the endpoint. Use **Test connection** or **Play** to validate behavior before enabling an operational schedule.
 
+**Tier** labels how risky a call is: **A** read-only (default for GET/HEAD), **B** writes data (default for other methods), **C** high impact (money, customer messages, irreversible changes). It is a label for triage and filtering; it does not change retries, roles, or confirmations.
+
+**Scheduler:** every new instance, production included, starts with the automatic scheduler off. A superadmin turns it on in **Settings** once endpoints and the allowlist are ready; the change is audited and survives restarts.
+
 The form can import a cURL command. Review every parsed URL, header, authentication field, and body before saving; imported credentials are sensitive.
 
 ### Request placeholders and runtime headers
@@ -59,6 +65,7 @@ The UI documents supported template placeholders next to request fields. CronSou
 ## 5. Run a job manually
 
 - **Play** enqueues a manual execution; an accepted response means queued, not completed.
+- A failed manual run alerts channels subscribed to *run fails*. To also hear about successful manual runs, tick **A manual run (Play) succeeds** on the channel; it is off by default to avoid noise.
 - A `409` indicates a singleton job already has an active run; wait for it to finish.
 - Dry run is not a universal no-op: it adds the configured marker/query parameter and still calls the target. Use it only with a receiver that treats the marker safely.
 - Simulated time requires a clock-aware receiver/header configuration. It changes the time supplied to the receiver; it does not change the host scheduler clock.
